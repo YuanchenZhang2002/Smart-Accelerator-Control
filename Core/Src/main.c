@@ -24,7 +24,6 @@
 #include "tim.h"
 #include "usart.h"
 #include "gpio.h"
-#include <stdint.h>
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -38,7 +37,8 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define ADC_CHANNEL_NUM 3
+#define FILTER_WINDOW 10
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -50,6 +50,12 @@
 
 /* USER CODE BEGIN PV */
 volatile uint8_t activation_flag=0;
+volatile uint16_t adc_dma_buffer[ADC_CHANNEL_NUM*FILTER_WINDOW];
+volatile uint16_t adc_filtered_APP1=0;
+volatile uint16_t adc_filtered_APP2=0;
+volatile uint16_t adc_filtered_RING=0;
+
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -98,7 +104,7 @@ int main(void)
   MX_USART2_UART_Init();
   MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
-
+HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adc_dma_buffer, ADC_CHANNEL_NUM*FILTER_WINDOW);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -106,7 +112,7 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-
+    
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
@@ -171,6 +177,30 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
   }
 
 }
+
+void Process_ADC_DATA(void)
+{
+  /* sum the values of adc_dma_buffer */
+  uint32_t sum_APP1 = 0;
+  uint32_t sum_APP2 = 0;
+  uint32_t sum_Ring = 0;
+
+  for (uint8_t i=0; i<FILTER_WINDOW; i++) {
+    uint8_t offset=i*ADC_CHANNEL_NUM;
+
+    sum_APP1+=adc_dma_buffer[offset];
+    sum_APP2+=adc_dma_buffer[offset+1];
+    sum_Ring+=adc_dma_buffer[offset+2];
+  }
+  adc_filtered_APP1=sum_APP1/FILTER_WINDOW;
+  adc_filtered_APP2=sum_APP2/FILTER_WINDOW;
+  adc_filtered_RING=sum_Ring/FILTER_WINDOW;
+
+  /* calculate the average of each channel */
+}
+
+
+
 
 
 /* USER CODE END 4 */

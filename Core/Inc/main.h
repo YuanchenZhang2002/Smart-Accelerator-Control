@@ -36,7 +36,13 @@ extern "C" {
 
 /* Exported types ------------------------------------------------------------*/
 /* USER CODE BEGIN ET */
-
+typedef struct {
+    uint16_t pedal1_min;//add2 minimum threshold
+    uint16_t pedal1_max;//add2 maximum threshold
+    uint16_t pedal2_min;//add1 minimum threshold
+    uint16_t pedal2_max;//add1 maximum threshold
+    uint32_t magic;
+} CalibrationData_t;
 /* USER CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/
@@ -53,7 +59,7 @@ extern "C" {
 void Error_Handler(void);
 
 /* USER CODE BEGIN EFP */
-
+void Process_ADC_DATA(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
@@ -75,7 +81,16 @@ void Error_Handler(void);
 #define SWO_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
+#define CALIBRATION_ADDR     0x080FF800  // Page 511
+#define CALIBRATION_MAGIC    0x55AA55AA
 
+#define RING_ADC_MIN 1165
+#define RING_ADC_MAX 2827
+
+#define ADC_OUT_OF_RANGE_MIN  50
+#define ADC_OUT_OF_RANGE_MAX  4045
+
+#define RATIONALITY_TOLERANCE 150
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus
