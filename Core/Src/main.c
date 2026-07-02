@@ -54,6 +54,8 @@ volatile uint16_t adc_dma_buffer[ADC_CHANNEL_NUM*FILTER_WINDOW];
 volatile uint16_t adc_filtered_APP1=0;
 volatile uint16_t adc_filtered_APP2=0;
 volatile uint16_t adc_filtered_RING=0;
+volatile uint8_t calibration_save_flag=0;
+extern volatile CalibrationData_t g_current_cal_data;
 
 
 /* USER CODE END PV */
@@ -104,7 +106,9 @@ int main(void)
   MX_USART2_UART_Init();
   MX_TIM6_Init();
   /* USER CODE BEGIN 2 */
-HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adc_dma_buffer, ADC_CHANNEL_NUM*FILTER_WINDOW);
+  HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adc_dma_buffer, ADC_CHANNEL_NUM*FILTER_WINDOW);
+  HAL_DAC_Start(&hdac1, DAC_CHANNEL_1);
+  HAL_DAC_Start(&hdac1, DAC_CHANNEL_2);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -175,8 +179,12 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
   {
     activation_flag=1;
   }
-
+  else if (GPIO_Pin==GPIO_PIN_1)
+  {
+    calibration_save_flag=1;
+  }
 }
+
 
 void Process_ADC_DATA(void)
 {
@@ -199,9 +207,42 @@ void Process_ADC_DATA(void)
   /* calculate the average of each channel */
 }
 
+void Save_Calibration_To_Flash(void)
+{
+    
+    HAL_FLASH_Unlock();
+
+    FLASH_EraseInitTypeDef EraseInitStruct;
+    uint32_t PageError = 0;
+    
+    EraseInitStruct.TypeErase   = FLASH_TYPEERASE_PAGES;
+    EraseInitStruct.Banks       = FLASH_BANK_1; 
+    EraseInitStruct.Page        = 511; // Corresponding address 0x080FF800
+    EraseInitStruct.NbPages     = 1;
+
+    if (HAL_FLASHEx_Erase(&EraseInitStruct, &PageError) != HAL_OK) {
+        Error_Handler();
+    }
+
+    uint64_t *data_to_write = (uint64_t *)&g_current_cal_data;
+
+    HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, CALIBRATION_ADDR, data_to_write[0]);
+    HAL_FLASH_Program(FLASH_TYPEPROGRAM_DOUBLEWORD, CALIBRATION_ADDR + 8, data_to_write[1]);
+
+    HAL_FLASH_Lock();
+}
 
 
+uint16_t map_accelerator_value(uint16_t adc_filtered_RING, uint16_t pedal_min, uint16_t pedal_max) 
+{
+    if (adc_filtered_RING <= RING_ADC_MIN) return pedal_min;
 
+    if (adc_filtered_RING >= RING_ADC_MAX) return pedal_max;
+
+    uint32_t mapped_val = (uint32_t)(adc_filtered_RING - RING_ADC_MIN) * (pedal_max - pedal_min) / (RING_ADC_MAX - RING_ADC_MIN) + pedal_min;
+    
+    return (uint16_t)mapped_val;
+}
 
 /* USER CODE END 4 */
 

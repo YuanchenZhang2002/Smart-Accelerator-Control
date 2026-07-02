@@ -42,6 +42,7 @@ typedef struct {
     uint16_t pedal2_min;//add1 minimum threshold
     uint16_t pedal2_max;//add1 maximum threshold
     uint32_t magic;
+    uint32_t reserved;//this flash write 8 bytes at a time
 } CalibrationData_t;
 /* USER CODE END ET */
 
@@ -60,6 +61,7 @@ void Error_Handler(void);
 
 /* USER CODE BEGIN EFP */
 void Process_ADC_DATA(void);
+void Save_Calibration_To_Flash(void)
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
@@ -91,6 +93,9 @@ void Process_ADC_DATA(void);
 #define ADC_OUT_OF_RANGE_MAX  4045
 
 #define RATIONALITY_TOLERANCE 150
+
+#define RING_ENTRY_THRESHOLD  150
+#define RING_EXIT_THRESHOLD   50
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

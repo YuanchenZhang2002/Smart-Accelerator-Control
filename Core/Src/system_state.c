@@ -2,21 +2,30 @@
 #include "system_state.h"
 #include "stm32l4xx_hal_conf.h"
 extern volatile uint8_t activation_flag;
-volatile SystemState_t g_system_state=SYSTEM_STATE_BYPASS;
+volatile SystemState_t g_system_state=SYSTEM_STATE_INIT;
 volatile CalibrationData_t *flash_data = (CalibrationData_t *)CALIBRATION_ADDR;
 volatile CalibrationData_t g_current_cal_data;
+extern volatile uint8_t calibration_save_flag;
+extern volatile uint16_t adc_filtered_APP1;
+extern volatile uint16_t adc_filtered_APP2;
+extern volatile uint16_t adc_filtered_RING;
+uint16_t dac_out1 = 0;
+uint16_t dac_out2 = 0;
+uint16_t dac2_value = 0;
+
 
 void state_transition(SystemState_t g_current_state)
 {
     switch (g_current_state)
     {
         case SYSTEM_STATE_BYPASS:
-            if (activation_flag == SET && pedal_output==ADC_OUT_OF_RANGE_MIN)
-            {
-                g_system_state = SYSTEM_STATE_INIT;
+            if ((activation_flag == SET) && (adc_filtered_APP1<=g_current_cal_data.pedal1_min + RATIONALITY_TOLERANCE)&&(adc_filtered_RING<=RING_ADC_MIN+ RING_ENTRY_THRESHOLD))
+            { 
+                g_system_state = SYSTEM_STATE_RING_IDLE;
             }
+            activation_flag = 0;
             break;
-        case SYSTEM_STATE_RING_INIT:
+        case SYSTEM_STATE_INIT:
             if(flash_data->magic==CALIBRATION_MAGIC)
             {
                 g_current_cal_data.pedal1_max=flash_data->pedal1_max;//load previous calibration data
@@ -24,22 +33,51 @@ void state_transition(SystemState_t g_current_state)
                 g_current_cal_data.pedal2_max=flash_data->pedal2_max;
                 g_current_cal_data.pedal2_min=flash_data->pedal2_min;
                 g_current_cal_data.magic=flash_data->magic;
-                g_system_state=SYSTEM_STATE_RING_IDLE;//set system state to ring idle
+                g_system_state=SYSTEM_STATE_BYPASS;//set system state to bypass as default
             }
             else
             {
+                g_current_cal_data.pedal1_min = 4095; 
+                g_current_cal_data.pedal1_max = 0;
+                g_current_cal_data.pedal2_min = 4095;
+                g_current_cal_data.pedal2_max = 0;
                 g_system_state=SYSTEM_STATE_CALIBRATION;//set system state to calibration
             }
             break;
         case SYSTEM_STATE_CALIBRATION:
+            if(calibration_save_flag==SET)
+            {
+                g_system_state=SYSTEM_STATE_BYPASS;
+            }
             break;
         case SYSTEM_STATE_RING_IDLE:
+            if (adc_filtered_RING > (RING_ADC_MIN + RING_ENTRY_THRESHOLD)) //import Hysteresis
+            {
+                g_system_state = SYSTEM_STATE_RING_ACTIVE;
+            }
+            if(brake_active==SET)
+            {
+                g_system_state = SYSTEM_STATE_RING_BRAKE_OVERRIDE;
+            }
             break;
         case SYSTEM_STATE_RING_ACTIVE:
+            if(brake_active==SET)//highest priority
+            {
+                g_system_state = SYSTEM_STATE_RING_BRAKE_OVERRIDE;
+            }
+            else if(adc_filtered_RING < (RING_ADC_MIN + RING_EXIT_THRESHOLD))
+            {
+                g_system_state = SYSTEM_STATE_RING_IDLE;
+            }
             break;
         case SYSTEM_STATE_RING_BRAKE_OVERRIDE:
+            if((brake_active==RESET) && (adc_filtered_RING < RING_ADC_MIN + RING_EXIT_THRESHOLD))//prevent sudden acceleration
+            {
+                g_system_state = SYSTEM_STATE_RING_IDLE;
+            }
             break;
         case SYSTEM_STATE_ERROR:
+            
             break;
     }
 }
@@ -49,16 +87,61 @@ void state_action(SystemState_t g_current_state)
     switch (g_current_state)
     {
         case SYSTEM_STATE_BYPASS:
+            HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, 0);
+            HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_2, DAC_ALIGN_12B_R, 0);
             break;
-        case SYSTEM_STATE_RING_INIT:
+        case SYSTEM_STATE_INIT:
+            HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, 0);
+            HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_2, DAC_ALIGN_12B_R, 0);
             break;
         case SYSTEM_STATE_CALIBRATION:
+            if(adc_filtered_APP1 > ADC_OUT_OF_RANGE_MIN)
+                {
+                    if(adc_filtered_APP1 > g_current_cal_data.pedal1_max)
+                    {
+                        g_current_cal_data.pedal1_max=adc_filtered_APP1;
+                    }
+                    if(adc_filtered_APP1 < g_current_cal_data.pedal1_min)
+                    {
+                        g_current_cal_data.pedal1_min=adc_filtered_APP1;
+                    }  
+                }
+                if(adc_filtered_APP2 > ADC_OUT_OF_RANGE_MIN)
+                {
+                    if(adc_filtered_APP2 > g_current_cal_data.pedal2_max)
+                    {
+                        g_current_cal_data.pedal2_max=adc_filtered_APP2;
+                    }
+                    if(adc_filtered_APP2 < g_current_cal_data.pedal2_min)
+                    {
+                        g_current_cal_data.pedal2_min=adc_filtered_APP2;
+                    }  
+                }
+
+                if(calibration_save_flag==SET)
+                {
+                    g_current_cal_data.magic = CALIBRATION_MAGIC;
+                    Save_Calibration_To_Flash();
+                    calibration_save_flag = 0;
+                }
+
             break;
         case SYSTEM_STATE_RING_IDLE:
+            HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, g_current_cal_data.pedal1_min);
+            dac2_value = (g_current_cal_data.pedal2_min * 100 + 75) / 151;
+            HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_2, DAC_ALIGN_12B_R, dac2_value);
             break;
         case SYSTEM_STATE_RING_ACTIVE:
+            dac_out1 = map_accelerator_value(adc_filtered_RING, g_current_cal_data.pedal1_min, g_current_cal_data.pedal1_max);
+            HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, dac_out1);
+            dac_out2 = map_accelerator_value(adc_filtered_RING, g_current_cal_data.pedal2_min, g_current_cal_data.pedal2_max);
+            dac2_value = (dac_out2 * 100 + 75) / 151;
+            HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_2, DAC_ALIGN_12B_R, dac2_value);
             break;
         case SYSTEM_STATE_RING_BRAKE_OVERRIDE:
+            HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, g_current_cal_data.pedal1_min);
+            dac2_value = (g_current_cal_data.pedal2_min * 100 + 75) / 151;
+            HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_2, DAC_ALIGN_12B_R, dac2_value);
             break;
         case SYSTEM_STATE_ERROR:
             break;
