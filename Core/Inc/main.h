@@ -44,6 +44,7 @@ typedef struct {
     uint32_t magic;
     uint32_t reserved;//this flash write 8 bytes at a time
 } CalibrationData_t;
+
 /* USER CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/
@@ -61,7 +62,9 @@ void Error_Handler(void);
 
 /* USER CODE BEGIN EFP */
 void Process_ADC_DATA(void);
-void Save_Calibration_To_Flash(void)
+void Save_Calibration_To_Flash(void);
+uint16_t map_accelerator_value(uint16_t adc_val, uint16_t pedal_min, uint16_t pedal_max);
+
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
@@ -75,6 +78,8 @@ void Save_Calibration_To_Flash(void)
 #define USART_TX_GPIO_Port GPIOA
 #define USART_RX_Pin GPIO_PIN_3
 #define USART_RX_GPIO_Port GPIOA
+#define BRAKE_Pin GPIO_PIN_7
+#define BRAKE_GPIO_Port GPIOA
 #define TMS_Pin GPIO_PIN_13
 #define TMS_GPIO_Port GPIOA
 #define TCK_Pin GPIO_PIN_14

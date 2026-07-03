@@ -5,18 +5,37 @@ extern volatile uint8_t activation_flag;
 volatile SystemState_t g_system_state=SYSTEM_STATE_INIT;
 volatile CalibrationData_t *flash_data = (CalibrationData_t *)CALIBRATION_ADDR;
 volatile CalibrationData_t g_current_cal_data;
+volatile uint8_t g_error_flag=0;
 extern volatile uint8_t calibration_save_flag;
 extern volatile uint16_t adc_filtered_APP1;
 extern volatile uint16_t adc_filtered_APP2;
 extern volatile uint16_t adc_filtered_RING;
+extern volatile uint8_t brake_active;
 uint16_t dac_out1 = 0;
 uint16_t dac_out2 = 0;
 uint16_t dac2_value = 0;
 
 
-void state_transition(SystemState_t g_current_state)
+void state_transition(SystemState_t current_state)
 {
-    switch (g_current_state)
+    if(current_state == SYSTEM_STATE_BYPASS)
+    {
+        if (adc_filtered_APP1>ADC_OUT_OF_RANGE_MAX||adc_filtered_APP1<ADC_OUT_OF_RANGE_MIN||
+            adc_filtered_APP2>ADC_OUT_OF_RANGE_MAX||adc_filtered_APP2<ADC_OUT_OF_RANGE_MIN)
+        {
+             g_error_flag = 1; 
+        }
+    }else if (current_state == SYSTEM_STATE_RING_IDLE ||
+              current_state == SYSTEM_STATE_RING_ACTIVE ||
+              current_state == SYSTEM_STATE_RING_BRAKE_OVERRIDE) 
+    {
+        if(adc_filtered_RING<200||adc_filtered_RING>3500)
+        {
+            g_system_state = SYSTEM_STATE_ERROR;
+            g_error_flag = 2; 
+        }
+    }
+    switch (current_state)
     {
         case SYSTEM_STATE_BYPASS:
             if ((activation_flag == SET) && (adc_filtered_APP1<=g_current_cal_data.pedal1_min + RATIONALITY_TOLERANCE)&&(adc_filtered_RING<=RING_ADC_MIN+ RING_ENTRY_THRESHOLD))
@@ -87,6 +106,42 @@ void state_action(SystemState_t g_current_state)
     switch (g_current_state)
     {
         case SYSTEM_STATE_BYPASS:
+            if (abs(adc_filtered_APP2 - (adc_filtered_APP1 * 2)) > RATIONALITY_TOLERANCE) 
+            {
+                g_error_flag=3;//plausability check fail
+            }
+
+            if(adc_filtered_APP1 > ADC_OUT_OF_RANGE_MIN && adc_filtered_APP1 < ADC_OUT_OF_RANGE_MAX)//self-learning
+            {
+                if(adc_filtered_APP1 > g_current_cal_data.pedal1_max)
+                {
+                    g_current_cal_data.pedal1_max = adc_filtered_APP1;
+                }
+                if(adc_filtered_APP1 < g_current_cal_data.pedal1_min)
+                {
+                    g_current_cal_data.pedal1_min = adc_filtered_APP1;
+                }
+            }
+
+            if(adc_filtered_APP2 > ADC_OUT_OF_RANGE_MIN && adc_filtered_APP2 < ADC_OUT_OF_RANGE_MAX)
+            {
+                if(adc_filtered_APP2 > g_current_cal_data.pedal2_max)
+                {
+                    g_current_cal_data.pedal2_max = adc_filtered_APP2;
+                }
+                if(adc_filtered_APP2 < g_current_cal_data.pedal2_min)
+                {
+                    g_current_cal_data.pedal2_min = adc_filtered_APP2;
+                }  
+            }
+
+            if(calibration_save_flag == SET)
+            {
+                g_current_cal_data.magic = CALIBRATION_MAGIC;
+                Save_Calibration_To_Flash();
+                calibration_save_flag = 0;
+            }
+
             HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, 0);
             HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_2, DAC_ALIGN_12B_R, 0);
             break;
@@ -144,6 +199,9 @@ void state_action(SystemState_t g_current_state)
             HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_2, DAC_ALIGN_12B_R, dac2_value);
             break;
         case SYSTEM_STATE_ERROR:
+            HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, g_current_cal_data.pedal1_min);
+            dac2_value = (g_current_cal_data.pedal2_min * 100 + 75) / 151;
+            HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_2, DAC_ALIGN_12B_R, dac2_value);
             break;
     }
 }

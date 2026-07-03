@@ -55,6 +55,7 @@ volatile uint16_t adc_filtered_APP1=0;
 volatile uint16_t adc_filtered_APP2=0;
 volatile uint16_t adc_filtered_RING=0;
 volatile uint8_t calibration_save_flag=0;
+volatile uint8_t brake_active=0;
 extern volatile CalibrationData_t g_current_cal_data;
 
 
@@ -109,6 +110,7 @@ int main(void)
   HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adc_dma_buffer, ADC_CHANNEL_NUM*FILTER_WINDOW);
   HAL_DAC_Start(&hdac1, DAC_CHANNEL_1);
   HAL_DAC_Start(&hdac1, DAC_CHANNEL_2);
+  HAL_TIM_Base_Start_IT(&htim6);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -116,7 +118,10 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-    
+    Process_ADC_DATA();
+    state_transition(g_system_state);
+    state_action(g_system_state);
+
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
@@ -185,6 +190,43 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
   }
 }
 
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+    if (htim->Instance == TIM6) 
+    {
+        static uint8_t brake_press_count = 0;
+        static uint8_t brake_release_count = 0;
+        GPIO_PinState current_brake_pin = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_7); 
+        if (current_brake_pin == GPIO_PIN_RESET) 
+        {
+            brake_release_count = 0; 
+            
+            
+            if (brake_press_count < 3) 
+            {
+                brake_press_count++;
+            }
+            else if (brake_press_count == 3) 
+            {
+                brake_active = SET;
+                brake_press_count++; 
+            }
+        }
+        else 
+        {
+            brake_press_count = 0; 
+            if (brake_release_count < 3) 
+            {
+                brake_release_count++;
+            }
+            else if (brake_release_count == 3) 
+            {
+                brake_active = RESET;
+                brake_release_count++; 
+            }
+        }
+    }
+}
 
 void Process_ADC_DATA(void)
 {
