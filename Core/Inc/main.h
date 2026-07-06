@@ -86,6 +86,8 @@ uint16_t map_accelerator_value(uint16_t adc_val, uint16_t pedal_min, uint16_t pe
 #define TCK_GPIO_Port GPIOA
 #define SWO_Pin GPIO_PIN_3
 #define SWO_GPIO_Port GPIOB
+#define RELAY_CTRL_Pin GPIO_PIN_5
+#define RELAY_CTRL_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 #define CALIBRATION_ADDR     0x080FF800  // Page 511

@@ -40,6 +40,10 @@ void state_transition(SystemState_t current_state)
         case SYSTEM_STATE_BYPASS:
             if ((activation_flag == SET) && (adc_filtered_APP1<=g_current_cal_data.pedal1_min + RATIONALITY_TOLERANCE)&&(adc_filtered_RING<=RING_ADC_MIN+ RING_ENTRY_THRESHOLD))
             { 
+                // Latch the DCDT relay: switch COM from NC (pedal) to NO (MCU DAC).
+                // The relay stays energized for the entire ignition cycle.
+                // Only an MCU power-off de-energizes it, falling back to NC (Fail-Safe Bypass).
+                HAL_GPIO_WritePin(RELAY_CTRL_GPIO_Port, RELAY_CTRL_Pin, GPIO_PIN_SET);
                 g_system_state = SYSTEM_STATE_RING_IDLE;
             }
             activation_flag = 0;
@@ -106,9 +110,29 @@ void state_action(SystemState_t g_current_state)
     switch (g_current_state)
     {
         case SYSTEM_STATE_BYPASS:
-            if (abs(adc_filtered_APP2 - (adc_filtered_APP1 * 2)) > RATIONALITY_TOLERANCE) 
+            // Before performing division, it is necessary to prevent division by zero (for example, when the system has just been initialized and max equals min).
+            if ((g_current_cal_data.pedal1_max > g_current_cal_data.pedal1_min) &&
+                (g_current_cal_data.pedal2_max > g_current_cal_data.pedal2_min))
             {
-                g_error_flag=3;//plausability check fail
+                // Calculate the physical travel ratio of APP1 (0 - 1000)
+                int32_t travel_app1 = (int32_t)(adc_filtered_APP1 - g_current_cal_data.pedal1_min) * 1000 /
+                                      (int32_t)(g_current_cal_data.pedal1_max - g_current_cal_data.pedal1_min);
+
+                // Calculate the physical travel ratio of APP2 (0 - 1000)
+                int32_t travel_app2 = (int32_t)(adc_filtered_APP2 - g_current_cal_data.pedal2_min) * 1000 /
+                                      (int32_t)(g_current_cal_data.pedal2_max - g_current_cal_data.pedal2_min);
+
+                // Limit the range to 0-1000 (to prevent pedal from hitting the physical limits, which would cause the calculation to result in a negative number or exceed 1000)
+                if (travel_app1 < 0)    travel_app1 = 0;
+                if (travel_app1 > 1000) travel_app1 = 1000;
+                if (travel_app2 < 0)    travel_app2 = 0;
+                if (travel_app2 > 1000) travel_app2 = 1000;
+
+                // Check the deviation of the stroke between the two channels. If the deviation exceeds 10% (i.e., 100/1000), it is judged as rationality failure
+                if (abs(travel_app1 - travel_app2) > 100)
+                {
+                    g_error_flag = 3;           // Plausibility check fail
+                }
             }
 
             if(adc_filtered_APP1 > ADC_OUT_OF_RANGE_MIN && adc_filtered_APP1 < ADC_OUT_OF_RANGE_MAX)//self-learning
