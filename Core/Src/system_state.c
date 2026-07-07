@@ -1,6 +1,8 @@
 #include "main.h"
 #include "system_state.h"
 #include "stm32l4xx_hal_conf.h"
+#include "dac.h"
+#include <stdlib.h>
 extern volatile uint8_t activation_flag;
 volatile SystemState_t g_system_state=SYSTEM_STATE_INIT;
 volatile CalibrationData_t *flash_data = (CalibrationData_t *)CALIBRATION_ADDR;
@@ -45,8 +47,10 @@ void state_transition(SystemState_t current_state)
                 // Only an MCU power-off de-energizes it, falling back to NC (Fail-Safe Bypass).
                 HAL_GPIO_WritePin(RELAY_CTRL_GPIO_Port, RELAY_CTRL_Pin, GPIO_PIN_SET);
                 g_system_state = SYSTEM_STATE_RING_IDLE;
+                activation_flag = 0; // Clear only after successful transition
             }
-            activation_flag = 0;
+            // NOTE: activation_flag is intentionally NOT cleared here when conditions
+            // are not met, so the flag persists until the ADC conditions are satisfied.
             break;
         case SYSTEM_STATE_INIT:
             if(flash_data->magic==CALIBRATION_MAGIC)
@@ -156,7 +160,7 @@ void state_action(SystemState_t g_current_state)
                 if(adc_filtered_APP2 < g_current_cal_data.pedal2_min)
                 {
                     g_current_cal_data.pedal2_min = adc_filtered_APP2;
-                }  
+                }
             }
 
             if(calibration_save_flag == SET)
@@ -174,7 +178,16 @@ void state_action(SystemState_t g_current_state)
             HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_2, DAC_ALIGN_12B_R, 0);
             break;
         case SYSTEM_STATE_CALIBRATION:
-            if(adc_filtered_APP1 > ADC_OUT_OF_RANGE_MIN)
+        {
+            // Wait 500ms after entering calibration for APP sensors to stabilize at power-on.
+            // Without this delay, the sensor's ramp-up transient (which can be much lower than
+            // the true idle voltage) gets recorded as pedal_min and corrupts the calibration.
+            static uint32_t cal_entry_tick = 0;
+            if (cal_entry_tick == 0) cal_entry_tick = HAL_GetTick();
+
+            if (HAL_GetTick() - cal_entry_tick >= 500)
+            {
+                if(adc_filtered_APP1 > ADC_OUT_OF_RANGE_MIN)
                 {
                     if(adc_filtered_APP1 > g_current_cal_data.pedal1_max)
                     {
@@ -183,7 +196,7 @@ void state_action(SystemState_t g_current_state)
                     if(adc_filtered_APP1 < g_current_cal_data.pedal1_min)
                     {
                         g_current_cal_data.pedal1_min=adc_filtered_APP1;
-                    }  
+                    }
                 }
                 if(adc_filtered_APP2 > ADC_OUT_OF_RANGE_MIN)
                 {
@@ -194,17 +207,19 @@ void state_action(SystemState_t g_current_state)
                     if(adc_filtered_APP2 < g_current_cal_data.pedal2_min)
                     {
                         g_current_cal_data.pedal2_min=adc_filtered_APP2;
-                    }  
+                    }
                 }
+            }
 
-                if(calibration_save_flag==SET)
-                {
-                    g_current_cal_data.magic = CALIBRATION_MAGIC;
-                    Save_Calibration_To_Flash();
-                    calibration_save_flag = 0;
-                }
-
+            if(calibration_save_flag==SET)
+            {
+                g_current_cal_data.magic = CALIBRATION_MAGIC;
+                Save_Calibration_To_Flash();
+                calibration_save_flag = 0;
+                cal_entry_tick = 0; // Reset for next calibration session
+            }
             break;
+        }
         case SYSTEM_STATE_RING_IDLE:
             HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, g_current_cal_data.pedal1_min);
             dac2_value = (g_current_cal_data.pedal2_min * 100 + 75) / 151;

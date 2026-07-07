@@ -118,7 +118,9 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-
+    Process_ADC_DATA();
+    state_transition(g_system_state);
+    state_action(g_system_state);
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */

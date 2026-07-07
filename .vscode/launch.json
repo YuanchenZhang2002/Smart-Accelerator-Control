@@ -1,0 +1,20 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "STM32 ST-Link Flashing & Debug",
+            "type": "cortex-debug",
+            "request": "launch",
+            "servertype": "openocd", // 使用 OpenOCD 作为 GDB 服务器
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/build/Debug/Overring_Accelarator.elf", // 注意：这里沿用了您生成日志里的拼写 Accelarator
+            "device": "STM32L476xx", // 您的目标芯片型号
+            "runToEntryPoint": "main",
+            "showDevDebugOutput": "none",
+            "configFiles": [
+                "interface/stlink.cfg",
+                "target/stm32l4x.cfg"
+            ]
+        }
+    ]
+}

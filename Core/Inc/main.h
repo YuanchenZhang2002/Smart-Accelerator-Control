@@ -96,10 +96,10 @@ uint16_t map_accelerator_value(uint16_t adc_val, uint16_t pedal_min, uint16_t pe
 #define RING_ADC_MIN 1165
 #define RING_ADC_MAX 2827
 
-#define ADC_OUT_OF_RANGE_MIN  50
+#define ADC_OUT_OF_RANGE_MIN 100
 #define ADC_OUT_OF_RANGE_MAX  4045
 
-#define RATIONALITY_TOLERANCE 150
+#define RATIONALITY_TOLERANCE 100
 
 #define RING_ENTRY_THRESHOLD  150
 #define RING_EXIT_THRESHOLD   50
