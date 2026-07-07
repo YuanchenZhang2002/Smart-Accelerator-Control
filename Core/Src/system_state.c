@@ -1,7 +1,10 @@
 #include "main.h"
 #include "system_state.h"
+#include "stm32l476xx.h"
+#include "stm32l4xx.h"
 #include "stm32l4xx_hal_conf.h"
 #include "dac.h"
+#include "stm32l4xx_hal_gpio.h"
 #include <stdlib.h>
 extern volatile uint8_t activation_flag;
 volatile SystemState_t g_system_state=SYSTEM_STATE_INIT;
