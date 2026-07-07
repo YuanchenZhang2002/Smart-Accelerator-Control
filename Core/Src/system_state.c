@@ -142,27 +142,33 @@ void state_action(SystemState_t g_current_state)
                 }
             }
 
-            if(adc_filtered_APP1 > ADC_OUT_OF_RANGE_MIN && adc_filtered_APP1 < ADC_OUT_OF_RANGE_MAX)//self-learning
+            // Wait 500ms after system boot before allowing self-learning.
+            // This prevents the transient low voltage during sensor power-up from
+            // being permanently caught as a false new minimum.
+            if (HAL_GetTick() >= 500)
             {
-                if(adc_filtered_APP1 > g_current_cal_data.pedal1_max)
+                if(adc_filtered_APP1 > ADC_OUT_OF_RANGE_MIN && adc_filtered_APP1 < ADC_OUT_OF_RANGE_MAX)//self-learning
                 {
-                    g_current_cal_data.pedal1_max = adc_filtered_APP1;
+                    if(adc_filtered_APP1 > g_current_cal_data.pedal1_max)
+                    {
+                        g_current_cal_data.pedal1_max = adc_filtered_APP1;
+                    }
+                    if(adc_filtered_APP1 < g_current_cal_data.pedal1_min)
+                    {
+                        g_current_cal_data.pedal1_min = adc_filtered_APP1;
+                    }
                 }
-                if(adc_filtered_APP1 < g_current_cal_data.pedal1_min)
-                {
-                    g_current_cal_data.pedal1_min = adc_filtered_APP1;
-                }
-            }
 
-            if(adc_filtered_APP2 > ADC_OUT_OF_RANGE_MIN && adc_filtered_APP2 < ADC_OUT_OF_RANGE_MAX)
-            {
-                if(adc_filtered_APP2 > g_current_cal_data.pedal2_max)
+                if(adc_filtered_APP2 > ADC_OUT_OF_RANGE_MIN && adc_filtered_APP2 < ADC_OUT_OF_RANGE_MAX)
                 {
-                    g_current_cal_data.pedal2_max = adc_filtered_APP2;
-                }
-                if(adc_filtered_APP2 < g_current_cal_data.pedal2_min)
-                {
-                    g_current_cal_data.pedal2_min = adc_filtered_APP2;
+                    if(adc_filtered_APP2 > g_current_cal_data.pedal2_max)
+                    {
+                        g_current_cal_data.pedal2_max = adc_filtered_APP2;
+                    }
+                    if(adc_filtered_APP2 < g_current_cal_data.pedal2_min)
+                    {
+                        g_current_cal_data.pedal2_min = adc_filtered_APP2;
+                    }
                 }
             }
 
