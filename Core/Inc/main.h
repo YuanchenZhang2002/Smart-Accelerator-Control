@@ -43,7 +43,7 @@ typedef struct {
     uint16_t pedal2_max;//add1 maximum threshold
     uint32_t magic;
     uint32_t reserved;//this flash write 8 bytes at a time
-} CalibrationData_t;
+} __attribute__((aligned(8))) CalibrationData_t;
 
 /* USER CODE END ET */
 
@@ -93,8 +93,8 @@ uint16_t map_accelerator_value(uint16_t adc_val, uint16_t pedal_min, uint16_t pe
 #define CALIBRATION_ADDR     0x080FF800  // Page 511
 #define CALIBRATION_MAGIC    0x55AA55AA
 
-#define RING_ADC_MIN 1165
-#define RING_ADC_MAX 2827
+#define RING_ADC_MIN 1170  
+#define RING_ADC_MAX 2822  
 
 #define ADC_OUT_OF_RANGE_MIN 100
 #define ADC_OUT_OF_RANGE_MAX  4045

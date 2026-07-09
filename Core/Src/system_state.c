@@ -122,12 +122,12 @@ void state_action(SystemState_t g_current_state)
                 (g_current_cal_data.pedal2_max > g_current_cal_data.pedal2_min))
             {
                 // Calculate the physical travel ratio of APP1 (0 - 1000)
-                int32_t travel_app1 = (int32_t)(adc_filtered_APP1 - g_current_cal_data.pedal1_min) * 1000 /
-                                      (int32_t)(g_current_cal_data.pedal1_max - g_current_cal_data.pedal1_min);
+                int32_t travel_app1 = ((int32_t)adc_filtered_APP1 - (int32_t)g_current_cal_data.pedal1_min) * 1000 /
+                                      ((int32_t)g_current_cal_data.pedal1_max - (int32_t)g_current_cal_data.pedal1_min);
 
                 // Calculate the physical travel ratio of APP2 (0 - 1000)
-                int32_t travel_app2 = (int32_t)(adc_filtered_APP2 - g_current_cal_data.pedal2_min) * 1000 /
-                                      (int32_t)(g_current_cal_data.pedal2_max - g_current_cal_data.pedal2_min);
+                int32_t travel_app2 = ((int32_t)adc_filtered_APP2 - (int32_t)g_current_cal_data.pedal2_min) * 1000 /
+                                      ((int32_t)g_current_cal_data.pedal2_max - (int32_t)g_current_cal_data.pedal2_min);
 
                 // Limit the range to 0-1000 (to prevent pedal from hitting the physical limits, which would cause the calculation to result in a negative number or exceed 1000)
                 if (travel_app1 < 0)    travel_app1 = 0;
@@ -142,10 +142,10 @@ void state_action(SystemState_t g_current_state)
                 }
             }
 
-            // Wait 500ms after system boot before allowing self-learning.
+            // Wait 1000ms after system boot before allowing self-learning.
             // This prevents the transient low voltage during sensor power-up from
             // being permanently caught as a false new minimum.
-            if (HAL_GetTick() >= 500)
+            if (HAL_GetTick() >= 1000)
             {
                 if(adc_filtered_APP1 > ADC_OUT_OF_RANGE_MIN && adc_filtered_APP1 < ADC_OUT_OF_RANGE_MAX)//self-learning
                 {
@@ -188,13 +188,13 @@ void state_action(SystemState_t g_current_state)
             break;
         case SYSTEM_STATE_CALIBRATION:
         {
-            // Wait 500ms after entering calibration for APP sensors to stabilize at power-on.
+            // Wait 1000ms after entering calibration for APP sensors to stabilize at power-on.
             // Without this delay, the sensor's ramp-up transient (which can be much lower than
             // the true idle voltage) gets recorded as pedal_min and corrupts the calibration.
             static uint32_t cal_entry_tick = 0;
             if (cal_entry_tick == 0) cal_entry_tick = HAL_GetTick();
 
-            if (HAL_GetTick() - cal_entry_tick >= 500)
+            if (HAL_GetTick() - cal_entry_tick >= 1000)
             {
                 if(adc_filtered_APP1 > ADC_OUT_OF_RANGE_MIN)
                 {
@@ -231,24 +231,28 @@ void state_action(SystemState_t g_current_state)
         }
         case SYSTEM_STATE_RING_IDLE:
             HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, g_current_cal_data.pedal1_min);
-            dac2_value = (g_current_cal_data.pedal2_min * 100 + 75) / 151;
+            /* DAC2 scale: compensate for 4.7k/10k ADC divider (÷10/14.7) and 1.51x output amp
+             * Net factor = (14.7/10) / 1.51 = 14.7/15.1 ≈ 147/151 */
+            dac2_value = (uint16_t)(((uint32_t)g_current_cal_data.pedal2_min * 147 + 75) / 151);
             HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_2, DAC_ALIGN_12B_R, dac2_value);
             break;
         case SYSTEM_STATE_RING_ACTIVE:
             dac_out1 = map_accelerator_value(adc_filtered_RING, g_current_cal_data.pedal1_min, g_current_cal_data.pedal1_max);
             HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, dac_out1);
             dac_out2 = map_accelerator_value(adc_filtered_RING, g_current_cal_data.pedal2_min, g_current_cal_data.pedal2_max);
-            dac2_value = (dac_out2 * 100 + 75) / 151;
+            /* DAC2 scale: compensate for 4.7k/10k ADC divider (÷10/14.7) and 1.51x output amp
+             * Net factor = (14.7/10) / 1.51 = 14.7/15.1 ≈ 147/151 */
+            dac2_value = (uint16_t)(((uint32_t)dac_out2 * 147 + 75) / 151);
             HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_2, DAC_ALIGN_12B_R, dac2_value);
             break;
         case SYSTEM_STATE_RING_BRAKE_OVERRIDE:
             HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, g_current_cal_data.pedal1_min);
-            dac2_value = (g_current_cal_data.pedal2_min * 100 + 75) / 151;
+            dac2_value = (uint16_t)(((uint32_t)g_current_cal_data.pedal2_min * 147 + 75) / 151);
             HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_2, DAC_ALIGN_12B_R, dac2_value);
             break;
         case SYSTEM_STATE_ERROR:
             HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, g_current_cal_data.pedal1_min);
-            dac2_value = (g_current_cal_data.pedal2_min * 100 + 75) / 151;
+            dac2_value = (uint16_t)(((uint32_t)g_current_cal_data.pedal2_min * 147 + 75) / 151);
             HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_2, DAC_ALIGN_12B_R, dac2_value);
             break;
     }
