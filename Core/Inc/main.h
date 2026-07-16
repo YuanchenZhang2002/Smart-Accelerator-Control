@@ -94,7 +94,7 @@ uint16_t map_accelerator_value(uint16_t adc_val, uint16_t pedal_min, uint16_t pe
 #define CALIBRATION_MAGIC    0x55AA55AA
 
 #define RING_ADC_MIN 1170  
-#define RING_ADC_MAX 2822  
+#define RING_ADC_MAX 2810  
 
 #define ADC_OUT_OF_RANGE_MIN 100
 #define ADC_OUT_OF_RANGE_MAX  4045
