@@ -239,8 +239,8 @@ void Process_ADC_DATA(void)
   for (uint8_t i=0; i<FILTER_WINDOW; i++) {
     uint8_t offset=i*ADC_CHANNEL_NUM;
 
-    sum_APP1+=adc_dma_buffer[offset];
-    sum_APP2+=adc_dma_buffer[offset+1];
+    sum_APP2+=adc_dma_buffer[offset];     // PC0 (ADC_IN1, Rank1) → physical APP2
+    sum_APP1+=adc_dma_buffer[offset+1];   // PC1 (ADC_IN2, Rank2) → physical APP1
     sum_Ring+=adc_dma_buffer[offset+2];
   }
   adc_filtered_APP1=sum_APP1/FILTER_WINDOW;

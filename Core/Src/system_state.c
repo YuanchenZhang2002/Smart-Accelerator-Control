@@ -10,15 +10,17 @@ extern volatile uint8_t activation_flag;
 volatile SystemState_t g_system_state=SYSTEM_STATE_INIT;
 volatile CalibrationData_t *flash_data = (CalibrationData_t *)CALIBRATION_ADDR;
 volatile CalibrationData_t g_current_cal_data;
-volatile uint8_t g_error_flag=0;
+volatile SystemFaultCode_t g_fault_code = FAULT_NONE;
 extern volatile uint8_t calibration_save_flag;
 extern volatile uint16_t adc_filtered_APP1;
 extern volatile uint16_t adc_filtered_APP2;
 extern volatile uint16_t adc_filtered_RING;
 extern volatile uint8_t brake_active;
-uint16_t dac_out1 = 0;
-uint16_t dac_out2 = 0;
+volatile uint16_t dac_out1 = 0;
+volatile uint16_t dac_out2 = 0;
 uint16_t dac2_value = 0;
+volatile int32_t travel_app1;
+volatile int32_t travel_app2;
 
 
 void state_transition(SystemState_t current_state)
@@ -27,8 +29,9 @@ void state_transition(SystemState_t current_state)
     {
         if (adc_filtered_APP1>ADC_OUT_OF_RANGE_MAX||adc_filtered_APP1<ADC_OUT_OF_RANGE_MIN||
             adc_filtered_APP2>ADC_OUT_OF_RANGE_MAX||adc_filtered_APP2<ADC_OUT_OF_RANGE_MIN)
-        {
-             g_error_flag = 1; 
+        {   
+            g_system_state = SYSTEM_STATE_FAULT;
+            g_fault_code = FAULT_APP_OUT_OF_RANGE; 
         }
     }else if (current_state == SYSTEM_STATE_RING_IDLE ||
               current_state == SYSTEM_STATE_RING_ACTIVE ||
@@ -36,21 +39,28 @@ void state_transition(SystemState_t current_state)
     {
         if(adc_filtered_RING<200||adc_filtered_RING>3500)
         {
-            g_system_state = SYSTEM_STATE_ERROR;
-            g_error_flag = 2; 
+            g_system_state = SYSTEM_STATE_FAULT;
+            g_fault_code = FAULT_RING_OUT_OF_RANGE; 
         }
     }
     switch (current_state)
     {
         case SYSTEM_STATE_BYPASS:
-            if ((activation_flag == SET) && (adc_filtered_APP1<=g_current_cal_data.pedal1_min + RATIONALITY_TOLERANCE)&&(adc_filtered_RING<=RING_ADC_MIN+ RING_ENTRY_THRESHOLD))
-            { 
-                // Latch the DCDT relay: switch COM from NC (pedal) to NO (MCU DAC).
-                // The relay stays energized for the entire ignition cycle.
-                // Only an MCU power-off de-energizes it, falling back to NC (Fail-Safe Bypass).
-                HAL_GPIO_WritePin(RELAY_CTRL_GPIO_Port, RELAY_CTRL_Pin, GPIO_PIN_SET);
-                g_system_state = SYSTEM_STATE_RING_IDLE;
-                activation_flag = 0; // Clear only after successful transition
+            if (g_fault_code == FAULT_NONE)
+            {
+                if ((activation_flag == SET) && (adc_filtered_APP1<=g_current_cal_data.pedal1_min + RATIONALITY_TOLERANCE)&&(adc_filtered_RING<=RING_ADC_MIN+ RING_ENTRY_THRESHOLD))
+                { 
+                    // Latch the DCDT relay: switch COM from NC (pedal) to NO (MCU DAC).
+                    // The relay stays energized for the entire ignition cycle.
+                    // Only an MCU power-off de-energizes it, falling back to NC (Fail-Safe Bypass).
+                    HAL_GPIO_WritePin(RELAY_CTRL_GPIO_Port, RELAY_CTRL_Pin, GPIO_PIN_SET);
+                    g_system_state = SYSTEM_STATE_RING_IDLE;
+                    activation_flag = 0; // Clear only after successful transition
+                }
+            }
+            else
+            {
+                activation_flag = 0;
             }
             // NOTE: activation_flag is intentionally NOT cleared here when conditions
             // are not met, so the flag persists until the ADC conditions are satisfied.
@@ -106,7 +116,7 @@ void state_transition(SystemState_t current_state)
                 g_system_state = SYSTEM_STATE_RING_IDLE;
             }
             break;
-        case SYSTEM_STATE_ERROR:
+        case SYSTEM_STATE_FAULT:
             
             break;
     }
@@ -122,12 +132,12 @@ void state_action(SystemState_t g_current_state)
                 (g_current_cal_data.pedal2_max > g_current_cal_data.pedal2_min))
             {
                 // Calculate the physical travel ratio of APP1 (0 - 1000)
-                int32_t travel_app1 = ((int32_t)adc_filtered_APP1 - (int32_t)g_current_cal_data.pedal1_min) * 1000 /
-                                      ((int32_t)g_current_cal_data.pedal1_max - (int32_t)g_current_cal_data.pedal1_min);
+                travel_app1 = ((int32_t)adc_filtered_APP1 - (int32_t)g_current_cal_data.pedal1_min) * 1000 /
+                              ((int32_t)g_current_cal_data.pedal1_max - (int32_t)g_current_cal_data.pedal1_min);
 
                 // Calculate the physical travel ratio of APP2 (0 - 1000)
-                int32_t travel_app2 = ((int32_t)adc_filtered_APP2 - (int32_t)g_current_cal_data.pedal2_min) * 1000 /
-                                      ((int32_t)g_current_cal_data.pedal2_max - (int32_t)g_current_cal_data.pedal2_min);
+                travel_app2 = ((int32_t)adc_filtered_APP2 - (int32_t)g_current_cal_data.pedal2_min) * 1000 /
+                              ((int32_t)g_current_cal_data.pedal2_max - (int32_t)g_current_cal_data.pedal2_min);
 
                 // Limit the range to 0-1000 (to prevent pedal from hitting the physical limits, which would cause the calculation to result in a negative number or exceed 1000)
                 if (travel_app1 < 0)    travel_app1 = 0;
@@ -138,7 +148,8 @@ void state_action(SystemState_t g_current_state)
                 // Check the deviation of the stroke between the two channels. If the deviation exceeds 10% (i.e., 100/1000), it is judged as rationality failure
                 if (abs(travel_app1 - travel_app2) > 100)
                 {
-                    g_error_flag = 3;           // Plausibility check fail
+                    g_system_state = SYSTEM_STATE_FAULT;
+                    g_fault_code = FAULT_APP_PLAUSIBILITY_FAIL;           // Plausibility check fail
                 }
             }
 
@@ -250,7 +261,7 @@ void state_action(SystemState_t g_current_state)
             dac2_value = (uint16_t)(((uint32_t)g_current_cal_data.pedal2_min * 147 + 75) / 151);
             HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_2, DAC_ALIGN_12B_R, dac2_value);
             break;
-        case SYSTEM_STATE_ERROR:
+        case SYSTEM_STATE_FAULT:
             HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, g_current_cal_data.pedal1_min);
             dac2_value = (uint16_t)(((uint32_t)g_current_cal_data.pedal2_min * 147 + 75) / 151);
             HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_2, DAC_ALIGN_12B_R, dac2_value);

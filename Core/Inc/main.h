@@ -37,10 +37,10 @@ extern "C" {
 /* Exported types ------------------------------------------------------------*/
 /* USER CODE BEGIN ET */
 typedef struct {
-    uint16_t pedal1_min;//add2 minimum threshold
-    uint16_t pedal1_max;//add2 maximum threshold
-    uint16_t pedal2_min;//add1 minimum threshold
-    uint16_t pedal2_max;//add1 maximum threshold
+    uint16_t pedal2_min; // APP2 (PC0) minimum threshold
+    uint16_t pedal2_max; // APP2 (PC0) maximum threshold
+    uint16_t pedal1_min; // APP1 (PC1) minimum threshold
+    uint16_t pedal1_max; // APP1 (PC1) maximum threshold
     uint32_t magic;
     uint32_t reserved;//this flash write 8 bytes at a time
 } __attribute__((aligned(8))) CalibrationData_t;
