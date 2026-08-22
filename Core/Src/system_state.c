@@ -119,6 +119,10 @@ void state_transition(SystemState_t current_state)
         case SYSTEM_STATE_FAULT:
             
             break;
+        default:
+            g_system_state = SYSTEM_STATE_FAULT;
+            g_fault_code = FAULT_UNKNOWN_STATE;
+            break;
     }
 }
 
@@ -262,6 +266,11 @@ void state_action(SystemState_t g_current_state)
             HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_2, DAC_ALIGN_12B_R, dac2_value);
             break;
         case SYSTEM_STATE_FAULT:
+            HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, g_current_cal_data.pedal1_min);
+            dac2_value = (uint16_t)(((uint32_t)g_current_cal_data.pedal2_min * 147 + 75) / 151);
+            HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_2, DAC_ALIGN_12B_R, dac2_value);
+            break;
+        default:
             HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_1, DAC_ALIGN_12B_R, g_current_cal_data.pedal1_min);
             dac2_value = (uint16_t)(((uint32_t)g_current_cal_data.pedal2_min * 147 + 75) / 151);
             HAL_DAC_SetValue(&hdac1, DAC_CHANNEL_2, DAC_ALIGN_12B_R, dac2_value);

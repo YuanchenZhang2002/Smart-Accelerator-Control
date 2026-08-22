@@ -19,7 +19,8 @@ typedef enum
     FAULT_NONE                  = 0,
     FAULT_APP_OUT_OF_RANGE      = 1,
     FAULT_RING_OUT_OF_RANGE     = 2,
-    FAULT_APP_PLAUSIBILITY_FAIL = 3
+    FAULT_APP_PLAUSIBILITY_FAIL = 3,
+    FAULT_UNKNOWN_STATE         = 4
 } SystemFaultCode_t;
 
 extern volatile SystemState_t g_system_state;
