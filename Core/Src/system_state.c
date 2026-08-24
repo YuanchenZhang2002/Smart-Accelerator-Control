@@ -25,45 +25,52 @@ volatile int32_t travel_app2;
 
 void state_transition(SystemState_t current_state)
 {
-    if(current_state == SYSTEM_STATE_BYPASS)
+    // 1. Check out-of-range faults based on current operational context
+    if (current_state == SYSTEM_STATE_BYPASS)
     {
-        if (adc_filtered_APP1>ADC_OUT_OF_RANGE_MAX||adc_filtered_APP1<ADC_OUT_OF_RANGE_MIN||
-            adc_filtered_APP2>ADC_OUT_OF_RANGE_MAX||adc_filtered_APP2<ADC_OUT_OF_RANGE_MIN)
+        if (adc_filtered_APP1 > ADC_OUT_OF_RANGE_MAX || adc_filtered_APP1 < ADC_OUT_OF_RANGE_MIN ||
+            adc_filtered_APP2 > ADC_OUT_OF_RANGE_MAX || adc_filtered_APP2 < ADC_OUT_OF_RANGE_MIN)
         {   
             g_system_state = SYSTEM_STATE_FAULT;
             g_fault_code = FAULT_APP_OUT_OF_RANGE; 
+            return; // CRITICAL: Exit immediately to prevent state overwrite
         }
-    }else if (current_state == SYSTEM_STATE_RING_IDLE ||
-              current_state == SYSTEM_STATE_RING_ACTIVE ||
-              current_state == SYSTEM_STATE_RING_BRAKE_OVERRIDE) 
+    }
+    else if (current_state == SYSTEM_STATE_RING_IDLE ||
+             current_state == SYSTEM_STATE_RING_ACTIVE ||
+             current_state == SYSTEM_STATE_RING_BRAKE_OVERRIDE) 
     {
-        if(adc_filtered_RING<200||adc_filtered_RING>3500)
+        if (adc_filtered_RING < 200 || adc_filtered_RING > 3500)
         {
             g_system_state = SYSTEM_STATE_FAULT;
             g_fault_code = FAULT_RING_OUT_OF_RANGE; 
+            return; // CRITICAL: Exit immediately to prevent state overwrite
         }
     }
+
+    // 2. Resolve normal state transitions only if no critical fault occurred
     switch (current_state)
     {
         case SYSTEM_STATE_BYPASS:
-            if (g_fault_code == FAULT_NONE)
+            if (activation_flag == SET)
             {
-                if ((activation_flag == SET) && (adc_filtered_APP1<=g_current_cal_data.pedal1_min + RATIONALITY_TOLERANCE)&&(adc_filtered_RING<=RING_ADC_MIN+ RING_ENTRY_THRESHOLD))
+                // Single-shot validation: Check all entry criteria simultaneously
+                if ((g_fault_code == FAULT_NONE) &&
+                    (brake_active == RESET) &&
+                    (adc_filtered_APP1 <= g_current_cal_data.pedal1_min + RATIONALITY_TOLERANCE) &&
+                    (adc_filtered_APP2 <= g_current_cal_data.pedal2_min + RATIONALITY_TOLERANCE) &&
+                    (adc_filtered_RING <= RING_ADC_MIN + RING_ENTRY_THRESHOLD))
                 { 
                     // Latch the DCDT relay: switch COM from NC (pedal) to NO (MCU DAC).
                     // The relay stays energized for the entire ignition cycle.
                     // Only an MCU power-off de-energizes it, falling back to NC (Fail-Safe Bypass).
                     HAL_GPIO_WritePin(RELAY_CTRL_GPIO_Port, RELAY_CTRL_Pin, GPIO_PIN_SET);
                     g_system_state = SYSTEM_STATE_RING_IDLE;
-                    activation_flag = 0; // Clear only after successful transition
                 }
+                // SAFETY FIX: Always clear activation flag on evaluation cycle.
+                // Prevents uncommanded latent mode switching if conditions become true later.
+                activation_flag = 0; 
             }
-            else
-            {
-                activation_flag = 0;
-            }
-            // NOTE: activation_flag is intentionally NOT cleared here when conditions
-            // are not met, so the flag persists until the ADC conditions are satisfied.
             break;
         case SYSTEM_STATE_INIT:
             if(flash_data->magic==CALIBRATION_MAGIC)
