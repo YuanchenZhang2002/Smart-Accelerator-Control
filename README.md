@@ -396,9 +396,11 @@ Measured restoration time:
 
 **5.45 ms**
 
+<!-- Image pending: add the original file before enabling this image.
 ![Power Loss Fallback](images/power-loss-fallback.png)
 
 *Hardware fallback after controller power removal.*
+-->
 
 ---
 
@@ -418,9 +420,11 @@ The maximum measured standard deviation across repeated measurements was approxi
 
 **3.2 mV**
 
+<!-- Image pending: add the original file before enabling this image.
 ![Output Mapping](images/output-mapping.png)
 
 *Measured APP output mapping compared with target values.*
+-->
 
 ---
 
